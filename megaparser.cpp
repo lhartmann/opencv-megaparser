@@ -27,28 +27,14 @@ megaparser::contours_t megaparser::getContours()
     return contours;
 }
 
-megaparser::contours_t megaparser::getContoursConvex()
-{
-    if (_cc.size())
-        return _cc;
-
-    contours_t contours = getContours();
-
-    for (auto &c : contours)
-        cv::convexHull(c,c);
-
-    _cc = contours;
-    return contours;
-}
-
-megaparser::rectList megaparser::getContoursRectangular()
+megaparser::rectList megaparser::getContoursFilled()
 {
     if (_cr.size())
         return  _cr;
 
     rectList markers;
 
-    // Consider contours rectangular if the fill over 95% of the bounding area.
+    // Consider contours filled if the fill over 50% of the bounding area.
     // A circle would fill pi/4 = 78%
     for (auto c : getContours()) {
         cv::Rect r = cv::boundingRect(c);
@@ -57,7 +43,7 @@ megaparser::rectList megaparser::getContoursRectangular()
 
         cv::Moments m = cv::moments(region, true);
 
-        if (m.m00 >= 0.5 * r.width * r.height)
+        if (m.m00 >= 0.50 * r.width * r.height)
             markers.push_back(r);
     }
 
@@ -76,7 +62,7 @@ megaparser::pointList megaparser::getMarkers()
     std::vector<cv::Point> markers;
 
     // Get the center coordinate of every rectangular shape
-    for (auto b : getContoursRectangular()) {
+    for (auto b : getContoursFilled()) {
         markers.push_back((b.tl() + b.br()) / 2);
     }
 
@@ -115,9 +101,8 @@ cv::Mat megaparser::getVisual()
 
     cv::cvtColor(src, _visual, CV_GRAY2BGR);
     cv::drawContours(_visual, getContours(), -1, cv::Scalar(0,0,255));
-//    cv::drawContours(_visual, getContoursConvex(), -1, cv::Scalar(0,0,128));
 
-    for (auto r : getContoursRectangular())
+    for (auto r : getContoursFilled())
         cv::rectangle(_visual, r, cv::Scalar(255,0,0));
 
     for (auto m : getMarkers())
@@ -128,10 +113,8 @@ cv::Mat megaparser::getVisual()
 
 void megaparser::updateMapping()
 {
-    if (!std::isnan(xoff)) {
-        qDebug("HELLO!");
+    if (!std::isnan(xoff))
         return;
-    }
 
     // Find the row with the column markers
     auto ref = getMarkers()[0];
@@ -139,7 +122,7 @@ void megaparser::updateMapping()
 
     // Get the column markers
     pointList cm;
-    for (auto r : getContoursRectangular()) {
+    for (auto r : getContoursFilled()) {
         cv::Point p = (r.tl() + r.br()) / 2;
 
         if (abs(ref.y - p.y) < step/2)
@@ -173,19 +156,26 @@ megaparser::data_t megaparser::getData()
 {
     data_t data;
 
+    // Find out where in the image should the markings be
     updateMapping();
     if (std::isnan(xoff))
-        return data;
+        return data; // failed
 
+    // Reads a row of data for each detected reference marker on the left.
     for (auto ref : getMarkers()) {
         std::vector<bool> row;
-        for (int i=0; i<cols(); ++i) {
-            double y0 = ref.y + yoff + i*dy;
-            double x0 = ref.x + xoff + i*dx;
-            double w2 = dx/6;
-            double h2 = dx/10;
 
+        // Reads each column
+        for (int i=0; i<cols(); ++i) {
+            double y0 = ref.y + yoff + i*dy; // Expected position
+            double x0 = ref.x + xoff + i*dx;
+            double w2 = dx/6;                // Half width
+            double h2 = dx/10;               // Half height
+
+            // Isolate marker region of the image
             cv::Mat region = src.rowRange(y0-h2, y0+h2).colRange(x0-w2, x0+w2);
+
+            // Check how much of it is filled, consider true if over 50%.
             auto m = cv::moments(region, true);
 
             row.push_back(m.m00 > 0.5*region.size().width * region.size().height);

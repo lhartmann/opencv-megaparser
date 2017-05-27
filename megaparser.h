@@ -32,10 +32,7 @@ public:
 
     // Returns all external contours
     contours_t getContours();
-
-    contours_t getContoursConvex();
-
-    rectList getContoursRectangular();
+    rectList getContoursFilled();
 
     // Returns only contours that look like reference markers
     pointList getMarkers();
