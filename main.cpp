@@ -22,10 +22,14 @@ int main(int argc, char *argv[])
         return 1;
     }
 
-    // Extract red channel, saturate, then parse
+    // The real work: Extract red channel, saturate, then parse
+    // Parsed data is returnes as a 2D bool vector: data[rows][columns]
     cv::extractChannel(src, src, 2);
     cv_saturator s(src, 0, 256-64, (src.rows+src.cols) * 0.2);
     megaparser mp(s.blackAndWhite());
+    auto data = mp.getData();
+
+    // Everything from here on is just for demonstration.
 
     // Optional: Save saturator and parser partial images for debugging.
     cv::imwrite(fn+"_01_src.png",   src);
@@ -35,9 +39,7 @@ int main(int argc, char *argv[])
     cv::imwrite(fn+"_05_B&W.png",   s.blackAndWhite());
     cv::imwrite(fn+"_06_mp.png",    mp.getVisual());
 
-    // Parsed data is returnes as a 2D bool vector: data[rows][columns]
-    // Iterate over it and print.
-    auto data = mp.getData();
+    // Iterate over the data and print.
     for (auto row : data) {
         for (auto col : row) {
             cout << (col ? "### " : "    ");
